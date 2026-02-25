@@ -6,6 +6,11 @@ import { ConvexClientProvider } from "@/components/providers/convex-client-provi
 export const metadata: Metadata = {
   title: "Live Chat",
   description: "Realtime DM app",
+  icons: {
+    icon: "/chat-icon.svg",
+    shortcut: "/chat-icon.svg",
+    apple: "/chat-icon.svg",
+  },
 };
 
 export default function RootLayout({
@@ -13,7 +18,7 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
-      <body className="h-[100dvh] bg-slate-100 text-slate-900 antialiased">
+            <body className="h-[100dvh] text-slate-900 antialiased">
         <ClerkProvider>
           <ConvexClientProvider>{children}</ConvexClientProvider>
         </ClerkProvider>
