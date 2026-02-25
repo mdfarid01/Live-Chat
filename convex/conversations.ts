@@ -17,14 +17,6 @@ async function me(ctx: QueryCtx | MutationCtx) {
   if (!user) throw new Error("Profile missing");
   return user;
 }
-async function meOrNull(ctx: QueryCtx | MutationCtx) {
-  const identity = await ctx.auth.getUserIdentity();
-  if (!identity) return null;
-  return await ctx.db
-    .query("users")
-    .withIndex("by_clerkId", (q) => q.eq("clerkId", identity.subject))
-    .unique();
-}
 
 async function upsertRead(
   ctx: MutationCtx,
@@ -82,9 +74,7 @@ export const markAsRead = mutation({
 export const listForCurrentUser = query({
   args: {},
   handler: async (ctx) => {
-    
-    const current = await meOrNull(ctx);
-    if (!current) return [];
+    const current = await me(ctx);
     const conversations = await ctx.db
       .query("conversations")
       .withIndex("by_updatedAt")
