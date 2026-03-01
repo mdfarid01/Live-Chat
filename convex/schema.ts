@@ -26,6 +26,9 @@ export default defineSchema({
   conversations: defineTable({
     participantIds: v.array(v.id("users")),
     participantKey: v.string(),
+    isGroup: v.optional(v.boolean()),
+    groupName: v.optional(v.string()),
+    groupCreatedBy: v.optional(v.id("users")),
     updatedAt: v.number(),
     lastMessageText: v.optional(v.string()),
     lastMessageAt: v.optional(v.number()),

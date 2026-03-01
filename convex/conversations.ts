@@ -62,12 +62,51 @@ export const getOrCreate = mutation({
         String(a).localeCompare(String(b))
       ) as Id<"users">[],
       participantKey: key,
+      isGroup: false,
       updatedAt: Date.now(),
     });
 
     await upsertRead(ctx, id, current._id, 0);
     await upsertRead(ctx, id, args.otherUserId, 0);
     return id;
+  },
+});
+
+export const createGroup = mutation({
+  args: {
+    groupName: v.string(),
+    memberIds: v.array(v.id("users")),
+  },
+  handler: async (ctx, args) => {
+    const current = await me(ctx);
+    const groupName = args.groupName.trim();
+    if (!groupName) throw new Error("Group name is required");
+
+    const uniqueOthers = Array.from(new Set(args.memberIds.filter((id) => id !== current._id)));
+
+    // Require multiple selected members (besides yourself).
+    if (uniqueOthers.length < 2) {
+      throw new Error("Select at least 2 members");
+    }
+
+    const participantIds = [current._id, ...uniqueOthers].sort((a, b) =>
+      String(a).localeCompare(String(b))
+    ) as Id<"users">[];
+
+    const conversationId = await ctx.db.insert("conversations", {
+      participantIds,
+      participantKey: `group:${Date.now()}:${String(current._id)}`,
+      isGroup: true,
+      groupName,
+      groupCreatedBy: current._id,
+      updatedAt: Date.now(),
+    });
+
+    for (const userId of participantIds) {
+      await upsertRead(ctx, conversationId, userId, 0);
+    }
+
+    return conversationId;
   },
 });
 
@@ -82,7 +121,6 @@ export const markAsRead = mutation({
 export const listForCurrentUser = query({
   args: {},
   handler: async (ctx) => {
-    
     const current = await meOrNull(ctx);
     if (!current) return [];
     const conversations = await ctx.db
@@ -95,12 +133,6 @@ export const listForCurrentUser = query({
     const out = [];
 
     for (const c of mine) {
-      const otherId = c.participantIds.find((id) => id !== current._id);
-      if (!otherId) continue;
-
-      const other = await ctx.db.get(otherId);
-      if (!other) continue;
-
       const read = await ctx.db
         .query("conversationReads")
         .withIndex("by_conversation_user", (q) =>
@@ -115,8 +147,31 @@ export const listForCurrentUser = query({
         )
         .collect();
 
+      if (c.isGroup) {
+        out.push({
+          _id: c._id,
+          isGroup: true,
+          title: c.groupName ?? "Untitled group",
+          memberCount: c.participantIds.length,
+          lastMessageText: c.lastMessageText ?? "",
+          lastMessageAt: c.lastMessageAt ?? 0,
+          unreadCount: unread.filter((m) => m.senderId !== current._id).length,
+          otherUserLastSeen: 0,
+        });
+        continue;
+      }
+
+      const otherId = c.participantIds.find((id) => id !== current._id);
+      if (!otherId) continue;
+
+      const other = await ctx.db.get(otherId);
+      if (!other) continue;
+
       out.push({
         _id: c._id,
+        isGroup: false,
+        title: other.name,
+        memberCount: 2,
         otherUserId: other._id,
         otherUserName: other.name,
         otherUserImageUrl: other.imageUrl,

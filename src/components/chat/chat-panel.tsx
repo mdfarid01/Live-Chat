@@ -12,6 +12,8 @@ type Props = {
   conversationId: Id<"conversations">;
   title: string;
   isOnline: boolean;
+  statusText?: string;
+  showPresenceDot?: boolean;
   onBack: () => void;
 };
 
@@ -23,7 +25,14 @@ function toErrorMessage(error: unknown) {
 }
 
 // Active chat panel with realtime messages, typing, smart autoscroll, delete, and reactions.
-export function ChatPanel({ conversationId, title, isOnline, onBack }: Props) {
+export function ChatPanel({
+  conversationId,
+  title,
+  isOnline,
+  statusText,
+  showPresenceDot = true,
+  onBack,
+}: Props) {
   const messagesQuery = useQuery(api.messages.list, { conversationId });
   const messages = messagesQuery ?? [];
   const isMessagesLoading = messagesQuery === undefined;
@@ -163,10 +172,12 @@ export function ChatPanel({ conversationId, title, isOnline, onBack }: Props) {
         <div>
           <p className="text-base font-semibold text-slate-900">{title}</p>
           <p className="flex items-center gap-1.5 text-xs font-medium text-slate-500">
-            <span
-              className={`h-2 w-2 rounded-full ${isOnline ? "bg-emerald-500" : "bg-slate-400"}`}
-            />
-            {isOnline ? "Online" : "Offline"}
+            {showPresenceDot && (
+              <span
+                className={`h-2 w-2 rounded-full ${isOnline ? "bg-emerald-500" : "bg-slate-400"}`}
+              />
+            )}
+            {statusText ?? (isOnline ? "Online" : "Offline")}
           </p>
         </div>
       </div>
