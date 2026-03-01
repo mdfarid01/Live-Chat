@@ -17,9 +17,16 @@ type Props = {
 
 const REACTIONS = ["👍", "❤️", "😂", "😮", "😢"] as const;
 
+function toErrorMessage(error: unknown) {
+  if (error instanceof Error) return error.message;
+  return "Please check your connection and try again.";
+}
+
 // Active chat panel with realtime messages, typing, smart autoscroll, delete, and reactions.
 export function ChatPanel({ conversationId, title, isOnline, onBack }: Props) {
-  const messages = useQuery(api.messages.list, { conversationId }) ?? [];
+  const messagesQuery = useQuery(api.messages.list, { conversationId });
+  const messages = messagesQuery ?? [];
+  const isMessagesLoading = messagesQuery === undefined;
   const typingRaw = useQuery(api.typing.getOtherTyping, { conversationId });
   const send = useMutation(api.messages.send);
   const deleteOwn = useMutation(api.messages.deleteOwn);
@@ -28,6 +35,9 @@ export function ChatPanel({ conversationId, title, isOnline, onBack }: Props) {
   const markAsRead = useMutation(api.conversations.markAsRead);
 
   const [draft, setDraft] = useState("");
+  const [isSending, setIsSending] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
+  const [lastFailedBody, setLastFailedBody] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now());
   const [stickBottom, setStickBottom] = useState(true);
   const [showNewBtn, setShowNewBtn] = useState(false);
@@ -106,11 +116,39 @@ export function ChatPanel({ conversationId, title, isOnline, onBack }: Props) {
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
     const body = draft.trim();
-    if (!body) return;
-    await send({ conversationId, body });
-    setDraft("");
-    if (stopTypingTimer.current) clearTimeout(stopTypingTimer.current);
-    await setTyping({ conversationId, isTyping: false });
+    if (!body || isSending) return;
+
+    setIsSending(true);
+    setSendError(null);
+    try {
+      await send({ conversationId, body });
+      setDraft("");
+      setLastFailedBody(null);
+      if (stopTypingTimer.current) clearTimeout(stopTypingTimer.current);
+      await setTyping({ conversationId, isTyping: false });
+    } catch (error) {
+      setSendError(toErrorMessage(error));
+      setLastFailedBody(body);
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  const retrySend = async () => {
+    if (!lastFailedBody || isSending) return;
+
+    setIsSending(true);
+    setSendError(null);
+    try {
+      await send({ conversationId, body: lastFailedBody });
+      setLastFailedBody(null);
+      if (stopTypingTimer.current) clearTimeout(stopTypingTimer.current);
+      await setTyping({ conversationId, isTyping: false });
+    } catch (error) {
+      setSendError(toErrorMessage(error));
+    } finally {
+      setIsSending(false);
+    }
   };
 
   return (
@@ -138,13 +176,23 @@ export function ChatPanel({ conversationId, title, isOnline, onBack }: Props) {
         onScroll={onScroll}
         className="chat-grid-bg flex-1 space-y-3 overflow-y-auto p-4"
       >
-        {messages.length === 0 && (
+        {isMessagesLoading && (
+          <div className="flex h-full min-h-40 items-center justify-center">
+            <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/90 px-4 py-2 text-sm text-slate-600 shadow-sm">
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-sky-600" />
+              Loading messages...
+            </div>
+          </div>
+        )}
+
+        {!isMessagesLoading && messages.length === 0 && (
           <div className="rounded-xl border border-slate-200/80 bg-white/85 p-4 text-sm text-slate-500 shadow-sm">
             No messages yet. Say hello.
           </div>
         )}
 
-        {messages.map((m) => (
+        {!isMessagesLoading &&
+          messages.map((m) => (
           <div key={m._id} className={`flex ${m.isMine ? "justify-end" : "justify-start"}`}>
             <div
               className={`max-w-[80%] rounded-2xl px-3 py-2.5 shadow-sm ${
@@ -208,7 +256,7 @@ export function ChatPanel({ conversationId, title, isOnline, onBack }: Props) {
               </div>
             </div>
           </div>
-        ))}
+          ))}
 
         {typing && (
           <div className="inline-flex items-center gap-2 rounded-full border border-slate-200/80 bg-white/90 px-3 py-1.5 text-xs text-slate-600 shadow-sm">
@@ -238,19 +286,34 @@ export function ChatPanel({ conversationId, title, isOnline, onBack }: Props) {
         onSubmit={onSubmit}
         className="border-t border-slate-200/70 bg-white/85 p-3 backdrop-blur-xl"
       >
+        {sendError && (
+          <div className="mb-2 flex items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50/90 px-3 py-2 text-xs text-rose-700">
+            <p className="min-w-0 truncate">Message failed to send. {sendError}</p>
+            <button
+              type="button"
+              onClick={() => void retrySend()}
+              disabled={!lastFailedBody || isSending}
+              className="shrink-0 rounded-lg bg-rose-600 px-2.5 py-1 text-white transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
         <div className="flex gap-2">
           <input
             value={draft}
             onChange={(e) => onChangeDraft(e.target.value)}
             placeholder="Type a message..."
+            disabled={isSending}
             className="flex-1 rounded-xl border border-slate-300/80 bg-white px-3 py-2 text-sm text-slate-800 outline-none ring-sky-500/25 transition focus:border-sky-500 focus:ring-4"
           />
           <button
             type="submit"
-            disabled={!draft.trim()}
+            disabled={!draft.trim() || isSending}
             className="rounded-xl bg-gradient-to-r from-sky-600 to-cyan-600 px-4 py-2 text-sm font-medium text-white shadow-md shadow-sky-500/25 transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Send
+            {isSending ? "Sending..." : "Send"}
           </button>
         </div>
       </form>
