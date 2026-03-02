@@ -300,6 +300,7 @@ export function ChatShell() {
             conversationId={activeConversationId}
             title={title}
             isOnline={online}
+            isGroupConversation={isGroupConversation}
             statusText={statusText}
             showPresenceDot={!isGroupConversation}
             onBack={() => setActiveConversationId(null)}

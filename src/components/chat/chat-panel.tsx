@@ -12,6 +12,7 @@ type Props = {
   conversationId: Id<"conversations">;
   title: string;
   isOnline: boolean;
+  isGroupConversation?: boolean;
   statusText?: string;
   showPresenceDot?: boolean;
   onBack: () => void;
@@ -29,6 +30,7 @@ export function ChatPanel({
   conversationId,
   title,
   isOnline,
+  isGroupConversation = false,
   statusText,
   showPresenceDot = true,
   onBack,
@@ -212,6 +214,12 @@ export function ChatPanel({
                   : "border border-slate-200/80 bg-white/95 text-slate-900"
               }`}
             >
+              {isGroupConversation && !m.isMine && (
+                <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-sky-700">
+                  {m.senderName}
+                </p>
+              )}
+
               <div className="flex items-start justify-between gap-3">
                 <p
                   className={`text-sm ${
